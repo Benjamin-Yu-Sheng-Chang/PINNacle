@@ -57,12 +57,12 @@ def load_model(RUN, i=None, rootdir="results/", verbose=False):
         files = [MODEL_DIR+"model_%.8i_%.8i.torch"%(i, im) for im in range(N_MODELS)]
         if verbose: print("Loading models from:\n%s%s%s"%(files[0], ", ..." if len(files)>2 else "", "\n"+files[-1] if len(files)>1 else ""))
         models = [_restore_model(file, c) for file in files]
-        supplement = [np.load(MODEL_DIR+"loss_%.8i.npy"%(i,)), np.load(MODEL_DIR+"active_%.8i.npy"%(i,))]
+        supplement = [np.loadtxt(MODEL_DIR+"loss_%.8i.npy"%(i,)), np.loadtxt(MODEL_DIR+"active_%.8i.npy"%(i,))]
     elif "PINN" in RUN:
         file = MODEL_DIR+"model_%.8i.torch"%(i)
         if verbose: print("Loading model from:\n%s"%(file))
         models = _restore_model(file, c)
-        supplement = [np.load(MODEL_DIR+"loss_%.8i.npy"%(i,))]
+        supplement = [np.loadtxt(MODEL_DIR+"loss_%.8i.npy"%(i,))]
     else:
         raise Exception("ERROR: could not recognise run! (%s)"%(RUN))
     
