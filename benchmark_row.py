@@ -30,8 +30,10 @@ pde_list = \
     [NS2D_LidDriven, NS2D_BackStep, NS2D_LongTime] + \
     [Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime] + \
     [KuramotoSivashinskyEquation, GrayScottEquation] + \
-    [PoissonND, HeatND] + \
-    [PoissonInv, HeatInv]
+    [PoissonND, HeatND]
+
+model_list = \
+    ["vanilla", ""]
 
 
 # pde_list += \
@@ -82,53 +84,55 @@ if __name__ == "__main__":
     trainer = Trainer(f"{date_str}-{command_args.name}", command_args.device)
 
     for pde_config in pde_list:
+        for model in model_list:
+            def get_model_dde():
+                if isinstance(pde_config, tuple):
+                    pde = pde_config[0](**pde_config[1])
+                else:
+                    pde = pde_config()
+                
+                # pde.training_points()
+                if command_args.method == "gepinn":
+                    pde.use_gepinn()
 
-        def get_model_dde():
-            if isinstance(pde_config, tuple):
-                pde = pde_config[0](**pde_config[1])
-            else:
-                pde = pde_config()
+                net = dde.nn.FNN([pde.input_dim] + parse_hidden_layers(command_args) + [pde.output_dim], "tanh", "Glorot normal")
+                if command_args.method == "laaf":
+                    net = DNN_LAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
+                elif command_args.method == "gaaf":
+                    net = DNN_GAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
+                net = net.float()
+
+                loss_weights = parse_loss_weight(command_args)
+                if loss_weights is None:
+                    loss_weights = np.ones(pde.num_loss)
+                else:
+                    loss_weights = np.array(loss_weights)
+
+                opt = torch.optim.Adam(net.parameters(), command_args.lr)
+                if command_args.method == "multiadam":
+                    opt = MultiAdam(net.parameters(), lr=1e-3, betas=(0.99, 0.99), loss_group_idx=[pde.num_pde])
+                elif command_args.method == "lra":
+                    opt = LR_Adaptor(opt, loss_weights, pde.num_pde)
+                elif command_args.method == "ntk":
+                    opt = LR_Adaptor_NTK(opt, loss_weights, pde)
+                elif command_args.method == "lbfgs":
+                    opt = Adam_LBFGS(net.parameters(), switch_epoch=5000, adam_param={'lr':command_args.lr})
+
+                model = pde.create_model(net)
+                model.compile(opt, loss_weights=loss_weights)
+                if command_args.method == "rar":
+                    model.train = rar_wrapper(pde, model, {"interval": 1000, "count": 1})
+                # the trainer calls model.train(**train_args)
+                return model
             
-            # pde.training_points()
-            if command_args.method == "gepinn":
-                pde.use_gepinn()
+            def get_model_with_name():
+                if model == "vanilla":
+                    net = dde.nn.FNN([pde.input_dim] + parse_hidden_layers(command_args) + [pde.output_dim], "tanh", "Glorot normal")
+                    loss_weights = np.ones(pde.num_loss)
+                    
+                    return model
+                elif model == ""
 
-            net = dde.nn.FNN([pde.input_dim] + parse_hidden_layers(command_args) + [pde.output_dim], "tanh", "Glorot normal")
-            if command_args.method == "laaf":
-                net = DNN_LAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
-            elif command_args.method == "gaaf":
-                net = DNN_GAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
-            net = net.float()
-
-            loss_weights = parse_loss_weight(command_args)
-            if loss_weights is None:
-                loss_weights = np.ones(pde.num_loss)
-            else:
-                loss_weights = np.array(loss_weights)
-
-            opt = torch.optim.Adam(net.parameters(), command_args.lr)
-            if command_args.method == "multiadam":
-                opt = MultiAdam(net.parameters(), lr=1e-3, betas=(0.99, 0.99), loss_group_idx=[pde.num_pde])
-            elif command_args.method == "lra":
-                opt = LR_Adaptor(opt, loss_weights, pde.num_pde)
-            elif command_args.method == "ntk":
-                opt = LR_Adaptor_NTK(opt, loss_weights, pde)
-            elif command_args.method == "lbfgs":
-                opt = Adam_LBFGS(net.parameters(), switch_epoch=5000, adam_param={'lr':command_args.lr})
-
-            model = pde.create_model(net)
-            model.compile(opt, loss_weights=loss_weights)
-            if command_args.method == "rar":
-                model.train = rar_wrapper(pde, model, {"interval": 1000, "count": 1})
-            # the trainer calls model.train(**train_args)
-            return model
-
-        def get_model_others():
-            model = None
-            # create a model object which support .train() method, and param @model_save_path is required
-            # create the object based on command_args and return it to be trained
-            # schedule the task using trainer.add_task(get_model_other, {training args})
-            return model
 
         trainer.add_task(
             get_model_dde, {
