@@ -1,4 +1,5 @@
 import argparse
+import csv
 import time
 import os
 from trainer import Trainer
@@ -23,18 +24,41 @@ from src.utils.rar import rar_wrapper
 
 # It is recommended not to modify this example file.
 # Please copy it as benchmark_xxx.py and make changes according to your own ideas.
-pde_list = \
-    [Burgers1D, Burgers2D] + \
-    [Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
-    [Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \
-    [NS2D_LidDriven, NS2D_BackStep, NS2D_LongTime] + \
-    [Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime] + \
-    [KuramotoSivashinskyEquation, GrayScottEquation] + \
-    [PoissonND, HeatND]
+pde_list = [Burgers1D, Burgers2D]
+# pde_list += \
+#     [Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
+#     [Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \
+#     [NS2D_LidDriven, NS2D_BackStep, NS2D_LongTime] + \
+#     [Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime] + \
+#     [KuramotoSivashinskyEquation, GrayScottEquation] + \
+#     [PoissonND, HeatND]
 
-model_list = \
-    ["vanilla", ""]
+DEFAULT_MODEL_LIST = [
+    "pinn",
+    "pinn+lra",
+    "pinn+ntk",
+    "pinn+multadam",
+    "pinn+lbfgs",
+    "laaf",
+    "gaaf",
+]
 
+MODEL_VARIANTS = {
+    "vanilla": ("pinn", "adam"),
+    "pinn": ("pinn", "adam"),
+    "laaf": ("laaf", "adam"),
+    "gaaf": ("gaaf", "adam"),
+    "lra": ("pinn", "lra"),
+    "ntk": ("pinn", "ntk"),
+    "multiadam": ("pinn", "multiadam"),
+    "multadam": ("pinn", "multiadam"),
+    "lbfgs": ("pinn", "lbfgs"),
+    "pinn+lra": ("pinn", "lra"),
+    "pinn+ntk": ("pinn", "ntk"),
+    "pinn+multiadam": ("pinn", "multiadam"),
+    "pinn+multadam": ("pinn", "multiadam"),
+    "pinn+lbfgs": ("pinn", "lbfgs"),
+}
 
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
@@ -74,6 +98,12 @@ if __name__ == "__main__":
     parser.add_argument('--plot-every', type=int, default=2000)
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--method', type=str, default="adam")
+    parser.add_argument(
+        '--models',
+        type=str,
+        default=",".join(DEFAULT_MODEL_LIST),
+        help="Comma-separated model variants to compare, e.g. pinn,pinn+lra,pinn+ntk,pinn+multadam,pinn+lbfgs",
+    )
 
     command_args = parser.parse_args()
 
@@ -82,24 +112,45 @@ if __name__ == "__main__":
         dde.config.set_random_seed(seed)
     date_str = time.strftime('%m.%d-%H.%M.%S', time.localtime())
     trainer = Trainer(f"{date_str}-{command_args.name}", command_args.device)
+    model_list = [model.strip().lower() for model in command_args.models.split(",") if model.strip()]
+    unknown_models = sorted(set(model_list) - set(MODEL_VARIANTS))
+    if unknown_models:
+        raise ValueError(f"Unknown model variants: {unknown_models}. Valid options are: {sorted(MODEL_VARIANTS)}")
+
+    comparison_rows = []
+
+    def create_pde(pde_config):
+        if isinstance(pde_config, tuple):
+            return pde_config[0](**pde_config[1])
+        return pde_config()
 
     for pde_config in pde_list:
-        for model in model_list:
-            def get_model_dde():
-                if isinstance(pde_config, tuple):
-                    pde = pde_config[0](**pde_config[1])
-                else:
-                    pde = pde_config()
-                
+        for variant_name in model_list:
+            model_name, method_name = MODEL_VARIANTS[variant_name]
+            task_id = len(comparison_rows)
+            pde_name = pde_config[0].__name__ if isinstance(pde_config, tuple) else pde_config.__name__
+            comparison_rows.append({
+                "task_id": task_id,
+                "pde": pde_name,
+                "model": variant_name,
+                "network": model_name,
+                "method": method_name,
+                "iterations": command_args.iter,
+            })
+
+            def get_model_dde(pde_config=pde_config, model_name=model_name, method_name=method_name):
+                pde = create_pde(pde_config)
+
                 # pde.training_points()
-                if command_args.method == "gepinn":
+                if method_name == "gepinn":
                     pde.use_gepinn()
 
-                net = dde.nn.FNN([pde.input_dim] + parse_hidden_layers(command_args) + [pde.output_dim], "tanh", "Glorot normal")
-                if command_args.method == "laaf":
-                    net = DNN_LAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
-                elif command_args.method == "gaaf":
-                    net = DNN_GAAF(len(parse_hidden_layers(command_args)) - 1, parse_hidden_layers(command_args)[0], pde.input_dim, pde.output_dim)
+                hidden_layers = parse_hidden_layers(command_args)
+                net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
+                if model_name == "laaf":
+                    net = DNN_LAAF(len(hidden_layers) - 1, hidden_layers[0], pde.input_dim, pde.output_dim)
+                elif model_name == "gaaf":
+                    net = DNN_GAAF(len(hidden_layers) - 1, hidden_layers[0], pde.input_dim, pde.output_dim)
                 net = net.float()
 
                 loss_weights = parse_loss_weight(command_args)
@@ -109,44 +160,39 @@ if __name__ == "__main__":
                     loss_weights = np.array(loss_weights)
 
                 opt = torch.optim.Adam(net.parameters(), command_args.lr)
-                if command_args.method == "multiadam":
+                if method_name == "multiadam":
                     opt = MultiAdam(net.parameters(), lr=1e-3, betas=(0.99, 0.99), loss_group_idx=[pde.num_pde])
-                elif command_args.method == "lra":
+                elif method_name == "lra":
                     opt = LR_Adaptor(opt, loss_weights, pde.num_pde)
-                elif command_args.method == "ntk":
+                elif method_name == "ntk":
                     opt = LR_Adaptor_NTK(opt, loss_weights, pde)
-                elif command_args.method == "lbfgs":
+                elif method_name == "lbfgs":
                     opt = Adam_LBFGS(net.parameters(), switch_epoch=5000, adam_param={'lr':command_args.lr})
 
                 model = pde.create_model(net)
                 model.compile(opt, loss_weights=loss_weights)
-                if command_args.method == "rar":
+                if method_name == "rar":
                     model.train = rar_wrapper(pde, model, {"interval": 1000, "count": 1})
                 # the trainer calls model.train(**train_args)
                 return model
-            
-            def get_model_with_name():
-                if model == "vanilla":
-                    net = dde.nn.FNN([pde.input_dim] + parse_hidden_layers(command_args) + [pde.output_dim], "tanh", "Glorot normal")
-                    loss_weights = np.ones(pde.num_loss)
-                    
-                    return model
-                elif model == ""
 
-
-        trainer.add_task(
-            get_model_dde, {
-                "iterations": command_args.iter,
-                "display_every": command_args.log_every,
-                "callbacks": [
-                    TesterCallback(log_every=command_args.log_every),
-                    PlotCallback(log_every=command_args.plot_every, fast=True),
-                    LossCallback(verbose=True),
-                ]
-            }
-        )
+            trainer.add_task(
+                get_model_dde, {
+                    "iterations": command_args.iter,
+                    "display_every": command_args.log_every,
+                    "callbacks": [
+                        TesterCallback(log_every=command_args.log_every),
+                        PlotCallback(log_every=command_args.plot_every, fast=True),
+                        LossCallback(verbose=True),
+                    ]
+                }
+            )
 
     trainer.setup(__file__, seed)
+    with open(f"runs/{trainer.exp_name}/comparison_tasks.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["task_id", "pde", "model", "network", "method", "iterations"])
+        writer.writeheader()
+        writer.writerows(comparison_rows)
     trainer.set_repeat(command_args.repeat)
     trainer.train_all()
     trainer.summary()
