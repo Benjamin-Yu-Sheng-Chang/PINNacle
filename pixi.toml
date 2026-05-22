@@ -2,12 +2,13 @@
 authors = ["Benjamin-Yu-Sheng-Chang <benji.chang@mail.utoronto.ca>"]
 channels = ["conda-forge"]
 name = "PINNacle"
-platforms = ["win-64"]
+platforms = ["win-64", "osx-arm64"]
 version = "0.1.0"
 
 # Explicitly tells Pixi that CUDA 12 is expected/available for GPU packages
 [system-requirements]
 cuda = "12.0"
+macos = "14.0"
 
 [tasks]
 
@@ -20,5 +21,9 @@ scikit-learn = ">=1.8.0,<2"
 scikit-optimize = ">=0.10.2,<0.11"
 scipy = ">=1.17.1,<2"
 
-# Pulls down the CUDA-enabled build on Windows, but safely resolves on macOS
+[target.win-64.dependencies]
 pytorch-gpu = ">=2.10.0,<3"
+
+[target.osx-arm64.pypi-dependencies]
+# Use the official PyTorch wheel on Apple Silicon so MPS support is available.
+torch = "<=2.10.0"
