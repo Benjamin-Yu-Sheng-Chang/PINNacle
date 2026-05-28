@@ -43,7 +43,7 @@ DEFAULT_MODEL_LIST = [
     # "pinn+lbfgs",
     # "laaf",
     # "gaaf",
-    "mlp",
+    #"mlp",
     "pikan", 
 ]
 
@@ -156,6 +156,7 @@ if __name__ == "__main__":
         
                 # Route to the appropriate network object
                 if model_name == "pikan":
+                    hidden_layers = [80, 80]
                     # Pass full structural list extracted via parse_hidden_layers
                     net = DNN_PIKAN(
                         hidden_layers=hidden_layers, 
