@@ -27,3 +27,6 @@ pytorch-gpu = ">=2.10.0,<3"
 [target.osx-arm64.pypi-dependencies]
 # Use the official PyTorch wheel on Apple Silicon so MPS support is available.
 torch = "<=2.10.0"
+
+[pypi-dependencies]
+kan = ">=0.0.2, <0.0.3"

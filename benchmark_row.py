@@ -1,3 +1,4 @@
+
 import argparse
 import csv
 import time
@@ -10,6 +11,7 @@ import numpy as np
 import torch
 import deepxde as dde
 from src.model.laaf import DNN_GAAF, DNN_LAAF
+from src.model.pikan import DNN_PIKAN  # PIKAN model
 from src.optimizer import MultiAdam, LR_Adaptor, LR_Adaptor_NTK, Adam_LBFGS
 from src.pde.burgers import Burgers1D, Burgers2D
 from src.pde.chaotic import GrayScottEquation, KuramotoSivashinskyEquation
@@ -24,7 +26,7 @@ from src.utils.rar import rar_wrapper
 
 # It is recommended not to modify this example file.
 # Please copy it as benchmark_xxx.py and make changes according to your own ideas.
-pde_list = [Burgers1D, Burgers2D]
+pde_list = [Burgers1D]
 # pde_list += \
 #     [Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
 #     [Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \
@@ -34,30 +36,34 @@ pde_list = [Burgers1D, Burgers2D]
 #     [PoissonND, HeatND]
 
 DEFAULT_MODEL_LIST = [
-    "pinn",
-    "pinn+lra",
-    "pinn+ntk",
-    "pinn+multadam",
-    "pinn+lbfgs",
-    "laaf",
-    "gaaf",
+    # "pinn",
+    # "pinn+lra",
+    # "pinn+ntk",
+    # "pinn+multadam",
+    # "pinn+lbfgs",
+    # "laaf",
+    # "gaaf",
+    "mlp",
+    "pikan", 
 ]
 
 MODEL_VARIANTS = {
+    "mlp": ("mlp", "adam"),
     "vanilla": ("pinn", "adam"),
     "pinn": ("pinn", "adam"),
     "laaf": ("laaf", "adam"),
     "gaaf": ("gaaf", "adam"),
+    "pikan": ("pikan", "adam"), # added pikan variant
     "lra": ("pinn", "lra"),
     "ntk": ("pinn", "ntk"),
     "multiadam": ("pinn", "multiadam"),
-    "multadam": ("pinn", "multiadam"),
     "lbfgs": ("pinn", "lbfgs"),
     "pinn+lra": ("pinn", "lra"),
     "pinn+ntk": ("pinn", "ntk"),
     "pinn+multiadam": ("pinn", "multiadam"),
     "pinn+multadam": ("pinn", "multiadam"),
     "pinn+lbfgs": ("pinn", "lbfgs"),
+
 }
 
 # pde_list += \
@@ -90,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument('--name', type=str, default="benchmark")
     parser.add_argument('--device', type=str, default="0")  # set to "cpu" enables cpu training 
     parser.add_argument('--seed', type=int, default=None)
-    parser.add_argument('--hidden-layers', type=str, default="100*5")
+    parser.add_argument('--hidden-layers', type=str, default="100*5") # hidden layers
     parser.add_argument('--loss-weight', type=str, default="")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--iter', type=int, default=20000)
@@ -145,13 +151,38 @@ if __name__ == "__main__":
                 if method_name == "gepinn":
                     pde.use_gepinn()
 
+
                 hidden_layers = parse_hidden_layers(command_args)
-                net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
-                if model_name == "laaf":
+        
+                # Route to the appropriate network object
+                if model_name == "pikan":
+                    # Pass full structural list extracted via parse_hidden_layers
+                    net = DNN_PIKAN(
+                        hidden_layers=hidden_layers, 
+                        x_dim=pde.input_dim, 
+                        u_dim=pde.output_dim,
+                        grid_size=5,       # You can adjust these defaults or bind to args
+                        spline_order=3
+                    )
+                elif model_name == "laaf":
                     net = DNN_LAAF(len(hidden_layers) - 1, hidden_layers[0], pde.input_dim, pde.output_dim)
                 elif model_name == "gaaf":
                     net = DNN_GAAF(len(hidden_layers) - 1, hidden_layers[0], pde.input_dim, pde.output_dim)
+                elif model_name == "mlp":
+                    # Simple MLP built with PyTorch using the same hidden layer sizes
+                    layer_sizes_full = [pde.input_dim] + hidden_layers + [pde.output_dim]
+                    layers = []
+                    for i in range(len(layer_sizes_full) - 1):
+                        layers.append(torch.nn.Linear(layer_sizes_full[i], layer_sizes_full[i + 1]))
+                        # add activation after every hidden linear (not after final layer)
+                        if i < len(layer_sizes_full) - 2:
+                            layers.append(torch.nn.Tanh())
+                    net = torch.nn.Sequential(*layers)
+                else: # regular pinn
+                    net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
+    
                 net = net.float()
+                
 
                 loss_weights = parse_loss_weight(command_args)
                 if loss_weights is None:
