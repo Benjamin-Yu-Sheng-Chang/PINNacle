@@ -178,6 +178,7 @@ if __name__ == "__main__":
                         if i < len(layer_sizes_full) - 2:
                             layers.append(torch.nn.Tanh())
                     net = torch.nn.Sequential(*layers)
+                    net.regularizer = None  # Placeholder for regularization if needed
                 else: # regular pinn
                     net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
     

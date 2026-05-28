@@ -19,6 +19,8 @@ class DNN_PIKAN(torch.nn.Module):
         # Construct the complete layer layout for KAN
         # e.g., if x_dim=2, hidden_layers=[100, 100], u_dim=1 -> [2, 100, 100, 1]
         self.layer_sizes = [self.x_dim] + hidden_layers + [self.u_dim]
+
+        self.regularizer = None  # Placeholder for regularization if needed
         
         # Instantiate the Kolmogorov-Arnold Network
         self.kan = KAN(
