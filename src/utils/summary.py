@@ -41,15 +41,17 @@ def extract_name(path):
     print("\033[33mWarning:Could not find PDE Class Name.\033[0m")  # yellow
     return ""
 
-def extract_success(lines):
+def extract_success(lines, target_iter=20000):
     # example: Epoch 20000: saving model to runs/08.10-05.59.14-LBFGS_MainExp/0-0/20000.pt ...
+    # Use target_iter (from the experiment) instead of a hard-coded 20000.
     flags = [False, False]
+    prefix_epoch = f"Epoch {target_iter}:"
     for line in lines:
         line = line.strip()
-        if line.startswith("Epoch 20000:"):
-            flags[0]=True
+        if line.startswith(prefix_epoch):
+            flags[0] = True
         elif line.startswith("'train'"):
-            flags[1]=True
+            flags[1] = True
     return 1 if flags[0] and flags[1] else 0
 
 def summary(path, tasknum, repeat, iters):
@@ -60,7 +62,9 @@ def summary(path, tasknum, repeat, iters):
     for i in range(tasknum):
         name = extract_name('{}/{}-0/log.txt'.format(path, i))
         try:
-            success_mean, success_std = _process(extract_success, '{}/{}-{{}}/log.txt'.format(path, i), repeat)
+            # pass the target iteration for this task so short runs don't report failure
+            success_mean, success_std = _process(lambda lines, t=iters[i]: extract_success(lines, t),
+                                                 '{}/{}-{{}}/log.txt'.format(path, i), repeat)
             run_time_mean, run_time_std = _process(extract_time, '{}/{}-{{}}/log.txt'.format(path, i), repeat)
             train_loss_mean, train_loss_std = _process(lambda data: data[-1, 1], '{}/{}-{{}}/loss.txt'.format(path, i), repeat)
         except (FileNotFoundError, IOError):

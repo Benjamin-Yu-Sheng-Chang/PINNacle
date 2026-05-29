@@ -11,7 +11,10 @@ import numpy as np
 import torch
 import deepxde as dde
 from src.model.laaf import DNN_GAAF, DNN_LAAF
-from src.model.pikan import DNN_PIKAN  # PIKAN model
+try:
+    from src.model.pikan import DNN_PIKAN  # PIKAN model
+except Exception:
+    DNN_PIKAN = None
 from src.model.mlp import StandardMLP, MLPReLUk # mlp models
 from src.model.acpkan import ACPKAN_Deterministic
 from src.optimizer import MultiAdam, LR_Adaptor, LR_Adaptor_NTK, Adam_LBFGS
@@ -28,7 +31,7 @@ from src.utils.rar import rar_wrapper
 
 # It is recommended not to modify this example file.
 # Please copy it as benchmark_xxx.py and make changes according to your own ideas.
-pde_list = [Burgers1D]
+pde_list = [Burgers1D, Burgers2D]
 # pde_list += \
 #     [Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
 #     [Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \

@@ -278,11 +278,14 @@ class TesterCallback(Callback):
         res[np.isnan(res)] = resn[np.isnan(res)]
         err = np.fft.rfftn(res, axes=tuple(range(res.ndim-1))) # transform except the last dim (pde.output_dim)
         err = np.mean(np.abs(err) ** 2 / res.size, axis=-1) # take average through the last dim
-
+        # For 1D, guard empty slices before calling mean to avoid numpy runtime warnings
         if pde.input_dim == 1:
-            err_low = err[:self.fRMSE_l].mean()
-            err_mid = err[self.fRMSE_l:self.fRMSE_h].mean()
-            err_high = err[self.fRMSE_h:].mean()
+            low_slice = err[:self.fRMSE_l]
+            mid_slice = err[self.fRMSE_l:self.fRMSE_h]
+            high_slice = err[self.fRMSE_h:]
+            err_low = low_slice.mean() if low_slice.size > 0 else np.nan
+            err_mid = mid_slice.mean() if mid_slice.size > 0 else np.nan
+            err_high = high_slice.mean() if high_slice.size > 0 else np.nan
         else:
             err_low, err_mid, err_high = 0.0, 0.0, 0.0
             err_low_cnt, err_mid_cnt, err_high_cnt = 0, 0, 0
@@ -298,9 +301,9 @@ class TesterCallback(Callback):
                 err_low_cnt += ilow 
                 err_mid_cnt += ihigh - ilow
                 err_high_cnt += err.shape[-1] - ihigh
-            
-            err_low /= err_low_cnt # calculate mean square error
-            err_mid /= err_mid_cnt
-            err_high /= err_high_cnt
+            # avoid division by zero
+            err_low = err_low / err_low_cnt if err_low_cnt > 0 else np.nan
+            err_mid = err_mid / err_mid_cnt if err_mid_cnt > 0 else np.nan
+            err_high = err_high / err_high_cnt if err_high_cnt > 0 else np.nan
 
         return err_low, err_mid, err_high
