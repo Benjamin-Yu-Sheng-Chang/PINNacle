@@ -13,6 +13,7 @@ import deepxde as dde
 from src.model.laaf import DNN_GAAF, DNN_LAAF
 from src.model.pikan import DNN_PIKAN  # PIKAN model
 from src.model.mlp import StandardMLP, MLPReLUk # mlp models
+from src.model.acpkan import ACPKAN_Deterministic
 from src.optimizer import MultiAdam, LR_Adaptor, LR_Adaptor_NTK, Adam_LBFGS
 from src.pde.burgers import Burgers1D, Burgers2D
 from src.pde.chaotic import GrayScottEquation, KuramotoSivashinskyEquation
@@ -44,6 +45,7 @@ DEFAULT_MODEL_LIST = [
     # "pinn+lbfgs",
     # "laaf",
     # "gaaf",
+    "acpkan",
     "pikan", 
     "mlp", # with tanh
     "reluk2",
@@ -54,6 +56,7 @@ MODEL_VARIANTS = {
     "mlp": ("mlp", "adam"),
     "reluk2": ("reluk2", "adam"),
     "reluk3": ("reluk3", "adam"),
+    "acpkan": ("acpkan", "adam"),
     "vanilla": ("pinn", "adam"),
     "pinn": ("pinn", "adam"),
     "laaf": ("laaf", "adam"),
@@ -188,6 +191,15 @@ if __name__ == "__main__":
                     depth = len(hidden_layers) if hidden_layers else 1
                     hidden_dim = hidden_layers[0] if hidden_layers else 64
                     net = MLPReLUk(pde.input_dim, hidden_dim, pde.output_dim, depth, k=3)
+                elif model_name == "acpkan":
+                    hidden_dim = hidden_layers[0] if hidden_layers else 6
+                    net = ACPKAN_Deterministic(
+                        input_dim=pde.input_dim,
+                        hidden_dim=hidden_dim,
+                        output_dim=pde.output_dim,
+                        poly_degree=2,
+                        dropout_p=0.1,
+                    )
                 else: # regular pinn
                     net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
     
