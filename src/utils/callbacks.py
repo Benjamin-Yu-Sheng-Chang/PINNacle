@@ -202,10 +202,21 @@ class TesterCallback(Callback):
 
         self.indexes = np.array(self.indexes)
         self.frmses = np.array(self.frmses)
+        if self.frmses.size == 0:
+            frmses_low = np.array([])
+            frmses_mid = np.array([])
+            frmses_high = np.array([])
+        else:
+            if self.frmses.ndim == 1:
+                self.frmses = self.frmses.reshape(-1, 3)
+            frmses_low = self.frmses[:, 0]
+            frmses_mid = self.frmses[:, 1]
+            frmses_high = self.frmses[:, 2]
+
         np.savetxt(
             self.save_path + 'errors.txt',
-            np.array([self.indexes, self.maes, self.mses, self.mxes, self.l1res, self.l2res, self.crmses,\
-                      self.frmses[:, 0], self.frmses[:, 1], self.frmses[:, 2]]).T,
+            np.array([self.indexes, self.maes, self.mses, self.mxes, self.l1res, self.l2res, self.crmses, \
+                      frmses_low, frmses_mid, frmses_high]).T,
             header="epochs, maes, mses, mxes, l1res, l2res, crmses, frmses(low, mid, high)"
         )
 
@@ -217,12 +228,13 @@ class TesterCallback(Callback):
                         labels=['l1re', 'l2re'],
                         path=self.save_path + "relerr.png",
                         title="relative error")
-        X = ~np.isnan(self.frmses).any(axis=1)
-        plot.plot_lines([self.indexes[X], self.frmses[X, 0], self.frmses[X, 1], self.frmses[X, 2]], 
-                        xlabel="epochs", 
-                        labels=['low freq', 'mid freq', 'high freq'], 
-                        path=self.save_path + "frmses.png", 
-                        title="mean square error in fourier space")
+        if self.frmses.size > 0:
+            X = ~np.isnan(self.frmses).any(axis=1)
+            plot.plot_lines([self.indexes[X], self.frmses[X, 0], self.frmses[X, 1], self.frmses[X, 2]], 
+                            xlabel="epochs", 
+                            labels=['low freq', 'mid freq', 'high freq'], 
+                            path=self.save_path + "frmses.png", 
+                            title="mean square error in fourier space")
 
         self.indexes = []
         self.maes = []   

@@ -12,6 +12,7 @@ import torch
 import deepxde as dde
 from src.model.laaf import DNN_GAAF, DNN_LAAF
 from src.model.pikan import DNN_PIKAN  # PIKAN model
+from src.model.mlp import StandardMLP, MLPReLUk # mlp models
 from src.optimizer import MultiAdam, LR_Adaptor, LR_Adaptor_NTK, Adam_LBFGS
 from src.pde.burgers import Burgers1D, Burgers2D
 from src.pde.chaotic import GrayScottEquation, KuramotoSivashinskyEquation
@@ -43,12 +44,16 @@ DEFAULT_MODEL_LIST = [
     # "pinn+lbfgs",
     # "laaf",
     # "gaaf",
-    #"mlp",
     "pikan", 
+    "mlp", # with tanh
+    "reluk2",
+    "reluk3",
 ]
 
 MODEL_VARIANTS = {
     "mlp": ("mlp", "adam"),
+    "reluk2": ("reluk2", "adam"),
+    "reluk3": ("reluk3", "adam"),
     "vanilla": ("pinn", "adam"),
     "pinn": ("pinn", "adam"),
     "laaf": ("laaf", "adam"),
@@ -156,7 +161,7 @@ if __name__ == "__main__":
         
                 # Route to the appropriate network object
                 if model_name == "pikan":
-                    hidden_layers = [80, 80]
+                    hidden_layers = [25, 25]
                     # Pass full structural list extracted via parse_hidden_layers
                     net = DNN_PIKAN(
                         hidden_layers=hidden_layers, 
@@ -170,16 +175,19 @@ if __name__ == "__main__":
                 elif model_name == "gaaf":
                     net = DNN_GAAF(len(hidden_layers) - 1, hidden_layers[0], pde.input_dim, pde.output_dim)
                 elif model_name == "mlp":
-                    # Simple MLP built with PyTorch using the same hidden layer sizes
+                    # Standard MLP with Tanh activation
                     layer_sizes_full = [pde.input_dim] + hidden_layers + [pde.output_dim]
-                    layers = []
-                    for i in range(len(layer_sizes_full) - 1):
-                        layers.append(torch.nn.Linear(layer_sizes_full[i], layer_sizes_full[i + 1]))
-                        # add activation after every hidden linear (not after final layer)
-                        if i < len(layer_sizes_full) - 2:
-                            layers.append(torch.nn.Tanh())
-                    net = torch.nn.Sequential(*layers)
-                    net.regularizer = None  # Placeholder for regularization if needed
+                    net = StandardMLP(layer_sizes_full)
+                elif model_name == "reluk2":
+                    # MLP with ReLUk activation (k=1)
+                    depth = len(hidden_layers) if hidden_layers else 1
+                    hidden_dim = hidden_layers[0] if hidden_layers else 64
+                    net = MLPReLUk(pde.input_dim, hidden_dim, pde.output_dim, depth, k=2)
+                elif model_name == "reluk3":
+                    # MLP with ReLUk activation (k=3)
+                    depth = len(hidden_layers) if hidden_layers else 1
+                    hidden_dim = hidden_layers[0] if hidden_layers else 64
+                    net = MLPReLUk(pde.input_dim, hidden_dim, pde.output_dim, depth, k=3)
                 else: # regular pinn
                     net = dde.nn.FNN([pde.input_dim] + hidden_layers + [pde.output_dim], "tanh", "Glorot normal")
     
